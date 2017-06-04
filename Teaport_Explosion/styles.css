@@ -1,0 +1,33 @@
+/* WebGL Exploding Teapots: Stylesheet
+   Author: Dylan Cutler */
+
+@import url('https://fonts.googleapis.com/css?family=Roboto');
+
+body {
+  background: #333;
+  font-family: 'Roboto';
+  color: #eee;
+}
+
+canvas {
+  background: none;
+  position: absolute;
+  top: 20px;
+  border: solid;
+  border-width: 2px;
+  border-color: #444;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+.slider-label {
+  position: absolute;
+  text-align: left;
+  font-size: 20px;
+}
+
+.slider {
+  position: absolute;
+  width: 300px;
+  height: 40px;
+}

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Newell 3D Teapot Explosion</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+  </head>
+  <body>
+    <!-- Canvas scene -->
+    <canvas id="webgl-canvas"></canvas>
+    <!-- Sliders -->
+    <div id=num-teapots class=slider-label><b>Teapots:</b> 1</div>
+    <input id=num-teapots-slider
+           class=slider
+           type=range
+           min=1 max=10
+           value=1
+           step=1 >
+    </input>
+    <div id=num-tessellations class=slider-label><b>Tessellations:</b> 0</div>
+    <input id=num-tessellations-slider
+           class=slider
+           type=range
+           min=0 max=3
+           value=0
+           step=1 >
+    </input>
+
+    <!-- Vertex shader -->
+    <script type="x-shader/x-vertex" id="shader-vs">
+      precision mediump float;
+
+      attribute vec3 m_Position;
+      attribute vec3 m_Offset;
+      attribute vec3 m_Normal;
+      attribute float m_Random;
+      attribute vec3 m_Axis;
+
+      // World position of vertices get passed into fragment shader
+      varying vec3 world_Position;
+      // Transformed normal vectors also get passed into the fragment shader
+      varying vec3 transformed_Normal;
+
+      // Explosion animation timer    
+      uniform float m_expTime; 
+      // Translation matrix (for multiple teapots)
+      uniform mat4 transMatrix; 
+      // View matrix
+      uniform mat4 viewMatrix; 
+      // Perspective matrix
+      uniform mat4 perspMatrix; 
+
+      // Get vertex position
+      vec3 getVertexPosition() {
+        vec3 m_offset;
+        vec3 m_normalPos;
+        vec3 m_normalAxis;
+        float m_theta;
+        mat3 m_rotation;
+        vec3 m_pos;
+
+        m_offset = normalize(m_Offset);
+
+        m_normalPos = normalize(m_Position);
+        m_normalAxis = normalize(m_Axis);
+
+        m_theta = pow(m_expTime, 0.5) * m_Random;
+        m_rotation = mat3( cos(m_theta) + pow(m_normalAxis.x, 2.)*(1.-cos(m_theta)),
+                         m_normalAxis.y*m_normalAxis.x*(1.-cos(m_theta)) + m_normalAxis.z*sin(m_theta),
+                         m_normalAxis.z*m_normalAxis.x*(1.-cos(m_theta)) - m_normalAxis.y*sin(m_theta),
+                         m_normalAxis.x*m_normalAxis.y*(1.-cos(m_theta)) - m_normalAxis.z*sin(m_theta),
+                         cos(m_theta) + pow(m_normalAxis.y, 2.)*(1.-cos(m_theta)),
+                         m_normalAxis.z*m_normalAxis.y*(1.-cos(m_theta)) + m_normalAxis.x*sin(m_theta),
+                         m_normalAxis.x*m_normalAxis.z*(1.-cos(m_theta)) + m_normalAxis.y*sin(m_theta),
+                         m_normalAxis.y*m_normalAxis.z*(1.-cos(m_theta)) + m_normalAxis.x*sin(m_theta),
+                         cos(m_theta) + pow(m_normalAxis.z, 2.)*(1.-cos(m_theta)) );
+
+        m_pos = m_Position - m_Offset;
+        m_pos = m_rotation * m_pos + m_Offset;
+
+        m_pos += pow(m_expTime, 1.25) * clamp(m_Random, 0.25, 1.) * m_offset / 1000.;
+        m_pos = vec3((transMatrix * vec4(m_pos, 1.)).xyz);
+        return m_pos;
+      }
+
+      void main() {
+        vec3 position3d = getVertexPosition();
+        world_Position = position3d;
+        transformed_Normal = normalize(m_Normal);
+        gl_Position = perspMatrix * viewMatrix * vec4(position3d, 1.);
+      }
+    </script>
+
+    <!-- Fragment shader -->
+    <script type="x-shader/x-fragment" id="shader-fs">
+      precision mediump float;
+
+      // Position of the camera
+      uniform vec3 m_cameraPos;
+
+      // World position of each vertex
+      varying vec3 world_Position;
+      
+      // Transformed normal vectors
+      varying vec3 transformed_Normal;
+
+      // Lights
+      vec3 m_lightPos[3];
+      vec3 m_lightCol[3];
+      float m_lightIntensity[3];
+
+
+      // Fragment shader uses Gourard shading
+      // and Blinn-Phong global illumination model
+
+      // Determining the diffuse color of the teapot
+      vec3 diffuseColor() {
+        vec3 m_diffColor;
+        m_diffColor = vec3(0.);
+
+        for(int i = 0; i < 3; i++) {
+          vec3 m_color;
+          vec3 m_lightDir;
+          float m_lambert;
+
+          m_color = vec3(0.5, 1., 0.9);
+          m_lightDir = m_lightPos[i] - world_Position;
+          m_lambert = dot(normalize(m_lightDir), transformed_Normal);
+          m_lambert *= m_lightIntensity[i];
+          m_lambert /= pow(length(m_lightDir), 2.);
+          m_lambert = clamp(m_lambert, 0.2, 1.);
+
+          m_diffColor += m_lambert * m_color * m_lightCol[i];
+        }
+
+        return m_diffColor;
+      }
+
+      // Determining the specular color of the teapot
+      vec3 specularColor() {
+        vec3 m_specColor;
+        m_specColor = vec3(0.);
+
+        for(int i = 0; i < 3; i++) {
+          vec3 m_lightDir;
+          vec3 m_viewDir;
+          vec3 H;
+          float m_specular;
+
+          m_lightDir = m_lightPos[i] - world_Position;
+          m_viewDir = world_Position - m_cameraPos;
+          H = normalize(m_lightDir + m_viewDir);
+          m_specular = pow(max(dot(transformed_Normal, H), 0.), 200.);
+          m_specular *= m_lightIntensity[i];
+          m_specular /= pow(length(m_lightDir), 2.);
+
+          m_specColor += m_specular * vec3(.7);
+        }
+
+        return m_specColor;
+      }
+
+      void main() {
+        m_lightPos[0] = vec3(18., 15., 30.);
+        m_lightPos[1] = vec3(-15., 10., 30.);
+        m_lightPos[2] = vec3(-20., 5., -2.);
+
+        m_lightCol[0] = vec3(1., 0.7, 0.5);
+        m_lightCol[1] = vec3(0.3, 0.7, 1.);
+        m_lightCol[2] = vec3(0., 0.1, 0.3);
+
+        m_lightIntensity[0] = 1200.;
+        m_lightIntensity[1] = 400.;
+        m_lightIntensity[2] = 600.;
+
+        gl_FragColor = vec4(diffuseColor() + specularColor(), 1.);
+      }
+    </script>
+
+    <!-- JavaScript -->
+    <script type="text/javascript" src="js/lib/cuon-matrix.js"></script>
+    <script type="text/javascript" src="js/lib/web-gl-loader.js"></script>
+    <script type="text/javascript" src="js/lib/jquery-2.1.4.min.js"></script>
+    <script type="text/javascript" src="js/Teapots.js"></script>
+    <script type="text/javascript" src="js/Shaders.js"></script>
+    <script type="text/javascript" src="js/Buffers.js"></script>
+    <script type="text/javascript" src="js/Scene.js"></script>
+    <script type="text/javascript" src="js/main.js"></script>
+  </body>
+</html>
